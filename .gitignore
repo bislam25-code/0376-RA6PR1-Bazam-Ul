@@ -1,0 +1,24 @@
+# WorkTracker — .gitignore
+
+# PHP
+*.log
+*.cache
+
+# Sessió (fitxers temporals de sessió)
+/tmp/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Entorns
+.env
+.env.local
+.env.*.local
+
+# Configuració sensible (si es personalitza)
+config/db.php
