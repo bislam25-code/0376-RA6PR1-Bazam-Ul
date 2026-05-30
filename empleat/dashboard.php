@@ -2,12 +2,26 @@
 /*
  * WorkTracker — Panell d'Empleat
  * Fitxer: empleat/dashboard.php
+ * 
+ * Projecte independent: usa config/db.php, BD worktracker, sessions $_SESSION['usuari']
  */
 
 session_start();
 
-// Protegir: només usuaris autenticats amb rol empleat
-if (!isset($_SESSION['usuari']) || $_SESSION['usuari']['rol'] !== 'empleat') {
+// Protegir: si no autenticat, login
+if (!isset($_SESSION['usuari'])) {
+    header('Location: ../auth/login.php');
+    exit;
+}
+
+// Si és admin, redirigir al seu panell
+if ($_SESSION['usuari']['rol'] === 'admin') {
+    header('Location: ../auth/dashboard_admin.php');
+    exit;
+}
+
+// Si no és empleat, login
+if ($_SESSION['usuari']['rol'] !== 'empleat') {
     header('Location: ../auth/login.php');
     exit;
 }
@@ -25,11 +39,12 @@ $success = '';
 // ============================================================
 if (isset($_POST['fichar_entrada'])) {
     $projecte_id = (int) ($_POST['projecte_id'] ?? 0);
+    $notes       = trim($_POST['notes_entrada'] ?? '');
 
     if ($projecte_id <= 0) {
         $error = 'Selecciona un projecte abans de fitxar.';
     } else {
-        // Comprovar si ja ha fitxat avui (qualsevol registre amb data = avui)
+        // Comprovar si ja ha fitxat avui
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM registres_hores WHERE usuari_id = :uid AND data = CURDATE()'
         );
@@ -39,13 +54,19 @@ if (isset($_POST['fichar_entrada'])) {
         if ($ja_fitxat_avui) {
             $error = 'Ja has fitxat avui. No pots fitxar dues vegades el mateix dia.';
         } else {
+            $ara_text = date('d/m/Y H:i:s');
+            $notes_finals = $notes
+                ? "Fitxat entrada: $ara_text — $notes"
+                : "Fitxat entrada: $ara_text";
+
             $stmt = $pdo->prepare(
-                'INSERT INTO registres_hores (usuari_id, projecte_id, hora_entrada, data)
-                 VALUES (:uid, :pid, NOW(), CURDATE())'
+                'INSERT INTO registres_hores (usuari_id, projecte_id, hora_entrada, data, notes)
+                 VALUES (:uid, :pid, NOW(), CURDATE(), :notes)'
             );
             $stmt->execute([
-                ':uid' => $usuari_id,
-                ':pid' => $projecte_id,
+                ':uid'   => $usuari_id,
+                ':pid'   => $projecte_id,
+                ':notes' => $notes_finals,
             ]);
             $success = 'Entrada fitxada correctament a les ' . date('H:i:s') . '.';
         }
@@ -53,12 +74,12 @@ if (isset($_POST['fichar_entrada'])) {
 }
 
 // ============================================================
-// 2) PROCÉS: Fichar sortida
+// 2) PROCÉS: Fichar sortida (càlcul amb MySQL)
 // ============================================================
 if (isset($_POST['fichar_sortida'])) {
-    // Buscar el registre obert d'avui (sense hora_sortida)
+    // Buscar registre obert d'avui
     $stmt = $pdo->prepare(
-        'SELECT id, hora_entrada FROM registres_hores
+        'SELECT id, hora_entrada, notes FROM registres_hores
          WHERE usuari_id = :uid AND data = CURDATE() AND hora_sortida IS NULL
          LIMIT 1'
     );
@@ -68,50 +89,33 @@ if (isset($_POST['fichar_sortida'])) {
     if (!$registre_obert) {
         $error = 'No tens cap registre obert per fitxar la sortida.';
     } else {
-        // Calcular hores_totals com a diferència decimal
-        $hora_entrada_ts = strtotime($registre_obert['hora_entrada']);
-        $hora_sortida_ts = time();
-        $hores_totals = round(($hora_sortida_ts - $hora_entrada_ts) / 3600, 2);
+        $notes_antigues = $registre_obert['notes'] ?? '';
+        $ara_text       = date('d/m/Y H:i:s');
+        $notes_finals   = $notes_antigues
+            ? $notes_antigues . " | Sortida: $ara_text"
+            : "Sortida: $ara_text";
 
+        // Calcular hores amb MySQL: TIMESTAMPDIFF en segons / 3600
         $stmt = $pdo->prepare(
             'UPDATE registres_hores
-             SET hora_sortida = NOW(), hores_totals = :hores
+             SET hora_sortida  = NOW(),
+                 hores_totals  = ROUND(TIMESTAMPDIFF(SECOND, hora_entrada, NOW()) / 3600, 2),
+                 notes         = :notes
              WHERE id = :rid'
         );
         $stmt->execute([
-            ':hores' => $hores_totals,
+            ':notes' => $notes_finals,
             ':rid'   => $registre_obert['id'],
         ]);
-        $success = 'Sortida fitxada correctament. Total: ' . number_format($hores_totals, 2) . ' h.';
-    }
-}
 
-// ============================================================
-// 3) PROCÉS: Assignar hores a un projecte (manual)
-// ============================================================
-if (isset($_POST['assignar_hores'])) {
-    $projecte_id  = (int) ($_POST['projecte_id'] ?? 0);
-    $hores_manual = (float) ($_POST['hores_manual'] ?? 0);
-    $notes        = trim($_POST['notes'] ?? '');
-
-    if ($projecte_id <= 0) {
-        $error = 'Selecciona un projecte.';
-    } elseif ($hores_manual <= 0) {
-        $error = 'Les hores han de ser un valor positiu.';
-    } else {
+        // Recuperar el valor calculat per mostrar-lo
         $stmt = $pdo->prepare(
-            'INSERT INTO registres_hores (usuari_id, projecte_id, hora_entrada, hora_sortida, hores_totals, data, notes)
-             VALUES (:uid, :pid, :hentrada, :hsortida, :hores, CURDATE(), :notes)'
+            'SELECT hores_totals FROM registres_hores WHERE id = :rid'
         );
-        $stmt->execute([
-            ':uid'       => $usuari_id,
-            ':pid'       => $projecte_id,
-            ':hentrada'  => date('Y-m-d') . ' 00:00:00',
-            ':hsortida'  => date('Y-m-d') . ' 00:00:00',
-            ':hores'     => $hores_manual,
-            ':notes'     => $notes ?: null,
-        ]);
-        $success = 'S\'han assignat ' . number_format($hores_manual, 2) . ' h al projecte correctament.';
+        $stmt->execute([':rid' => $registre_obert['id']]);
+        $reg_actualitzat = $stmt->fetch();
+
+        $success = 'Sortida fitxada correctament. Total: ' . number_format((float)$reg_actualitzat['hores_totals'], 2) . ' h.';
     }
 }
 
@@ -123,7 +127,7 @@ if (isset($_POST['assignar_hores'])) {
 $stmt = $pdo->query('SELECT id, nom FROM projectes ORDER BY nom ASC');
 $projectes = $stmt->fetchAll();
 
-// Saber si hi ha un registre obert avui (per mostrar el botó de sortida)
+// Saber si hi ha un registre obert avui
 $stmt = $pdo->prepare(
     'SELECT id, hora_entrada FROM registres_hores
      WHERE usuari_id = :uid AND data = CURDATE() AND hora_sortida IS NULL
@@ -132,8 +136,8 @@ $stmt = $pdo->prepare(
 $stmt->execute([':uid' => $usuari_id]);
 $registre_obert = $stmt->fetch();
 
-// Historial de la setmana actual (dilluns a diumenge)
-$dilluns = date('Y-m-d', strtotime('monday this week'));
+// Historial de la setmana actual
+$dilluns  = date('Y-m-d', strtotime('monday this week'));
 $diumenge = date('Y-m-d', strtotime('sunday this week'));
 
 $stmt = $pdo->prepare(
@@ -159,13 +163,13 @@ $registres_setmana = $stmt->fetchAll();
     <title>WorkTracker — Panell d&#39;Empleat</title>
     <link rel="stylesheet" href="../assets/style.css">
     <style>
-        .dashboard-grid {
+        .dashboard-layout {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
             margin-top: 20px;
         }
-        .dashboard-grid .full-width {
+        .dashboard-layout .full-width {
             grid-column: 1 / -1;
         }
         .card {
@@ -290,10 +294,7 @@ $registres_setmana = $stmt->fetchAll();
             <div class="success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
-        <!-- ==================================================== -->
-        <!-- GRAELLA DE TARGETES                                  -->
-        <!-- ==================================================== -->
-        <div class="dashboard-grid">
+        <div class="dashboard-layout">
 
             <!-- -------- TARGETA: FITXAR (entrada / sortida) -------- -->
             <div class="card">
@@ -311,6 +312,15 @@ $registres_setmana = $stmt->fetchAll();
                             <?php endforeach; ?>
                         </select>
                     </div>
+
+                    <?php if (!$registre_obert): ?>
+                    <div>
+                        <label for="notes_entrada">Notes (opcional)</label>
+                        <textarea name="notes_entrada" id="notes_entrada"
+                                  placeholder="Què faràs? Ex: Revisió de codi, reunió..."></textarea>
+                        <p class="small">La data i hora s'afegiran automàticament.</p>
+                    </div>
+                    <?php endif; ?>
 
                     <div class="btn-group">
                         <?php if (!$registre_obert): ?>
@@ -336,36 +346,34 @@ $registres_setmana = $stmt->fetchAll();
                 <?php endif; ?>
             </div>
 
-            <!-- -------- TARGETA: ASSIGNAR HORES A PROJECTE -------- -->
+            <!-- -------- TARGETA BUIT (espai per al futur) -------- -->
             <div class="card">
-                <h3>Assignar hores a projecte</h3>
+                <h3>Resum d&#39;avui</h3>
+                <?php
+                    // Calcular hores totals d'avui
+                    $stmt = $pdo->prepare(
+                        "SELECT COALESCE(SUM(hores_totals), 0) AS total
+                         FROM registres_hores
+                         WHERE usuari_id = :uid AND data = CURDATE() AND hora_sortida IS NOT NULL"
+                    );
+                    $stmt->execute([':uid' => $usuari_id]);
+                    $total_avui = $stmt->fetch();
 
-                <form method="POST" action="">
-                    <div>
-                        <label for="projecte_assignar">Projecte</label>
-                        <select name="projecte_id" id="projecte_assignar" required>
-                            <option value="">-- Selecciona un projecte --</option>
-                            <?php foreach ($projectes as $p): ?>
-                                <option value="<?= (int) $p['id'] ?>">
-                                    <?= htmlspecialchars($p['nom'], ENT_QUOTES, 'UTF-8') ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label for="hores_manual">Hores treballades</label>
-                        <input type="number" step="0.01" min="0.01" name="hores_manual" id="hores_manual"
-                               placeholder="Ex: 7.5" required>
-                    </div>
-
-                    <div>
-                        <label for="notes">Notes (opcional)</label>
-                        <textarea name="notes" id="notes" placeholder="Comentaris addicionals..."></textarea>
-                    </div>
-
-                    <button type="submit" name="assignar_hores">Desar registre</button>
-                </form>
+                    // Calcular hores totals de la setmana
+                    $stmt = $pdo->prepare(
+                        "SELECT COALESCE(SUM(hores_totals), 0) AS total
+                         FROM registres_hores
+                         WHERE usuari_id = :uid AND data BETWEEN :dilluns AND :diumenge AND hora_sortida IS NOT NULL"
+                    );
+                    $stmt->execute([
+                        ':uid'     => $usuari_id,
+                        ':dilluns' => $dilluns,
+                        ':diumenge' => $diumenge,
+                    ]);
+                    $total_setmana = $stmt->fetch();
+                ?>
+                <p><strong>Hores d&#39;avui:</strong> <?= number_format((float)$total_avui['total'], 2) ?> h</p>
+                <p><strong>Hores aquesta setmana:</strong> <?= number_format((float)$total_setmana['total'], 2) ?> h</p>
             </div>
 
             <!-- -------- TARGETA: HISTORIAL DE LA SETMANA -------- -->
@@ -389,25 +397,19 @@ $registres_setmana = $stmt->fetchAll();
                             </thead>
                             <tbody>
                                 <?php foreach ($registres_setmana as $reg): ?>
-                                    <?php
-                                        $es_obert = is_null($reg['hora_sortida']);
-                                    ?>
+                                    <?php $es_obert = is_null($reg['hora_sortida']); ?>
                                     <tr>
                                         <td><?= date('d/m/Y', strtotime($reg['data'])) ?></td>
                                         <td><?= htmlspecialchars($reg['projecte_nom'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td><?= date('H:i:s', strtotime($reg['hora_entrada'])) ?></td>
-                                        <td>
-                                            <?= $es_obert ? '—' : date('H:i:s', strtotime($reg['hora_sortida'])) ?>
-                                        </td>
-                                        <td>
-                                            <?= $es_obert ? '—' : number_format((float) $reg['hores_totals'], 2) . ' h' ?>
-                                        </td>
+                                        <td><?= $es_obert ? '—' : date('H:i:s', strtotime($reg['hora_sortida'])) ?></td>
+                                        <td><?= $es_obert ? '—' : number_format((float) $reg['hores_totals'], 2) . ' h' ?></td>
                                         <td>
                                             <span class="badge <?= $es_obert ? 'badge-obert' : 'badge-tancat' ?>">
                                                 <?= $es_obert ? 'Obert' : 'Tancat' ?>
                                             </span>
                                         </td>
-                                        <td><?= htmlspecialchars($reg['notes'] ?? '—', ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td><?= nl2br(htmlspecialchars($reg['notes'] ?? '—', ENT_QUOTES, 'UTF-8')) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
