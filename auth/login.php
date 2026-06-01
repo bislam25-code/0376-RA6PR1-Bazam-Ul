@@ -9,7 +9,7 @@ session_start();
 // Si ja està autenticat, redirigir segons el rol
 if (isset($_SESSION['usuari'])) {
     if ($_SESSION['usuari']['rol'] === 'admin') {
-        header('Location: dashboard_admin.php');
+        header('Location: ../admin/dashboard.php');
     } else {
         header('Location: dashboard_empleat.php');
     }
@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_regenerate_id(true);
 
             if ($usuari['rol'] === 'admin') {
-                header('Location: dashboard_admin.php');
+                header('Location: ../admin/dashboard.php');
             } else {
                 header('Location: dashboard_empleat.php');
             }
