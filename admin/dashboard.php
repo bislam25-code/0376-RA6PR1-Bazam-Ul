@@ -335,6 +335,24 @@ $incomplidors = $stmt->fetchAll();
         nav { margin-bottom: 20px; }
         nav a { color: #3498db; text-decoration: none; }
         nav a:hover { text-decoration: underline; }
+        .resum-rapid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .resum-rapid .card-rapid {
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+        .resum-rapid .card-rapid .num { font-size: 1.6rem; font-weight: 700; color: #3498db; }
+        .resum-rapid .card-rapid .label { font-size: 0.8rem; color: #7f8c8d; margin-top: 2px; }
+        .resum-rapid .card-rapid.danger .num { color: #e74c3c; }
+        .resum-rapid .card-rapid.success .num { color: #27ae60; }
+
         .small { font-size: 0.85rem; color: #7f8c8d; }
         .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
         .badge-admin { background: #fcf3cf; color: #7d6608; }
@@ -357,6 +375,29 @@ $incomplidors = $stmt->fetchAll();
         <a href="?seccio=usuaris"  class="<?= $seccio === 'usuaris'  ? 'active' : '' ?>">👥 Usuaris</a>
         <a href="?seccio=projectes" class="<?= $seccio === 'projectes' ? 'active' : '' ?>">📁 Projectes</a>
         <a href="?seccio=incomplidors" class="<?= $seccio === 'incomplidors' ? 'active' : '' ?>">🚨 Llista vermella</a>
+        <a href="reports.php">📈 Reports</a>
+    </div>
+
+    <!-- Resum ràpid (sempre visible) -->
+    <?php
+    // Empleats actius avui
+    $stmt_rr = $pdo->prepare("SELECT COUNT(DISTINCT usuari_id) FROM registres_hores WHERE data = CURDATE() AND hora_entrada IS NOT NULL");
+    $stmt_rr->execute();
+    $actius_avui = (int) $stmt_rr->fetchColumn();
+
+    // Projectes en superàvit
+    $stmt_rr = $pdo->query("SELECT COUNT(*) FROM (SELECT p.id, COALESCE(SUM(r.hores_totals), 0) - p.hores_estimades AS diff FROM projectes p LEFT JOIN registres_hores r ON p.id = r.projecte_id AND r.hora_sortida IS NOT NULL GROUP BY p.id, p.hores_estimades HAVING diff <= 0) AS sub");
+    $projectes_superavit = (int) $stmt_rr->fetchColumn();
+
+    // Empleats sense fitxar avui
+    $stmt_rr = $pdo->prepare("SELECT COUNT(*) FROM usuaris u WHERE u.rol = 'empleat' AND NOT EXISTS (SELECT 1 FROM registres_hores r WHERE r.usuari_id = u.id AND r.data = CURDATE())");
+    $stmt_rr->execute();
+    $sense_fitxar = (int) $stmt_rr->fetchColumn();
+    ?>
+    <div class="resum-rapid">
+        <div class="card-rapid success"><div class="num"><?= $actius_avui ?></div><div class="label">✅ Actius avui</div></div>
+        <div class="card-rapid"><div class="num"><?= $projectes_superavit ?></div><div class="label">📊 Superàvit</div></div>
+        <div class="card-rapid <?= $sense_fitxar > 0 ? 'danger' : 'success' ?>"><div class="num"><?= $sense_fitxar ?></div><div class="label"><?= $sense_fitxar > 0 ? '⛔ Sense fitxar' : '✅ Tots' ?></div></div>
     </div>
 
     <!-- ================================================ -->
