@@ -4,14 +4,15 @@
  * Fitxer: auth/register.php
  */
 
-session_start();
+require_once __DIR__ . '/../config/init.php';
+require_once __DIR__ . '/../config/db.php';
 
 // Si ja està autenticat, redirigir
 if (isset($_SESSION['usuari'])) {
     if ($_SESSION['usuari']['rol'] === 'admin') {
-        header('Location: dashboard_admin.php');
+        header('Location: ../admin/dashboard.php');
     } else {
-        header('Location: dashboard_empleat.php');
+        header('Location: ../empleat/dashboard.php');
     }
     exit;
 }
@@ -20,7 +21,7 @@ $error   = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    require_once __DIR__ . '/../config/db.php';
+    csrf_verify();
 
     $nom      = htmlspecialchars(trim($_POST['nom'] ?? ''), ENT_QUOTES, 'UTF-8');
     $cognom   = htmlspecialchars(trim($_POST['cognom'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -28,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirm  = $_POST['confirm'] ?? '';
 
-    // Validacions
     if (empty($nom) || empty($cognom)) {
         $error = 'El nom i el cognom són obligatoris.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -38,16 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($password !== $confirm) {
         $error = 'Les contrasenyes no coincideixen.';
     } else {
-        // Comprovar si l'email ja existeix
         $stmt = $pdo->prepare('SELECT id FROM usuaris WHERE email = :email LIMIT 1');
         $stmt->execute([':email' => $email]);
         if ($stmt->fetch()) {
             $error = 'Aquest correu ja està registrat.';
         } else {
-            // Hash de la contrasenya (bcrypt per defecte)
             $password_hash = password_hash($password, PASSWORD_DEFAULT);
-
-            // Inserir el nou usuari (rol per defecte: empleat)
             $stmt = $pdo->prepare(
                 'INSERT INTO usuaris (nom, cognom, email, password_hash, rol)
                  VALUES (:nom, :cognom, :email, :password_hash, :rol)'
@@ -86,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="success"><?= $success ?></div>
         <?php else: ?>
             <form method="POST" action="">
+                <?php csrf_field(); ?>
                 <div>
                     <label for="nom">Nom</label>
                     <input type="text" name="nom" id="nom" required
