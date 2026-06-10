@@ -4,14 +4,13 @@
  * Fitxer: admin/reports.php
  */
 
-session_start();
+require_once __DIR__ . '/../config/init.php';
+require_once __DIR__ . '/../config/db.php';
 
 if (!isset($_SESSION['usuari']) || $_SESSION['usuari']['rol'] !== 'admin') {
     header('Location: ../auth/login.php');
     exit;
 }
-
-require_once __DIR__ . '/../config/db.php';
 
 $usuari = $_SESSION['usuari'];
 
@@ -272,10 +271,10 @@ foreach ($evolucio_diaria as $ed) {
                     ?>
                     <tr>
                         <td><strong><?= htmlspecialchars($rp['nom'], ENT_QUOTES, 'UTF-8') ?></strong></td>
-                        <td><?= number_format((float)$rp['hores_estimades'], 2) ?> h</td>
-                        <td><?= number_format((float)$rp['hores_consumides'], 2) ?> h</td>
+                        <td><?= format_hores_rellotge((float)$rp['hores_estimades']) ?></td>
+                        <td><?= format_hores_rellotge((float)$rp['hores_consumides']) ?></td>
                         <td style="color:<?= $positiu ? '#e74c3c' : '#27ae60' ?>;font-weight:700;">
-                            <?= $positiu ? '+' : '' ?><?= number_format($diff, 2) ?> h
+                            <?= $positiu ? '+' : '' ?><?= format_hores_rellotge($diff) ?>
                         </td>
                         <td>
                             <span class="badge <?= $positiu ? 'badge-negatiu' : 'badge-positiu' ?>">
@@ -321,10 +320,10 @@ foreach ($evolucio_diaria as $ed) {
                     ?>
                     <tr>
                         <td><?= htmlspecialchars($re['nom'] . ' ' . $re['cognom'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><strong><?= number_format((float)$re['hores_totals'], 2) ?> h</strong></td>
+                        <td><strong><?= format_hores_rellotge((float)$re['hores_totals']) ?></strong></td>
                         <td><?= (int)$re['total_registres'] ?></td>
                         <td><?= (int)$re['dies_treballats'] ?></td>
-                        <td><?= number_format($mitjana, 2) ?> h</td>
+                        <td><?= format_hores_rellotge($mitjana) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>

@@ -231,7 +231,7 @@ $alertes = obtenir_alertes_incompliment($pdo);
         <?php foreach ($alertes as $a): ?>
             <li><?= htmlspecialchars($a['nom'].' '.$a['cognom'],ENT_QUOTES,'UTF-8') ?>
                 — fitxat a les <?= date('H:i',strtotime($a['hora_entrada'])) ?>,
-                total: <?= number_format((float)$a['hores_totals'],2) ?> h
+                total: <?= format_hores_rellotge((float)$a['hores_totals']) ?>
             </li>
         <?php endforeach; ?>
         </ul>
@@ -269,8 +269,8 @@ $alertes = obtenir_alertes_incompliment($pdo);
             $dies=max((int)$ru['dies_treballats'],1); $mitjana=round((float)$ru['hores_totals']/$dies,2);
         ?><tr><td><?=htmlspecialchars($ru['nom'].' '.$ru['cognom'],ENT_QUOTES,'UTF-8')?></td>
         <td><span class="badge <?=$rol_u==='admin'?'badge-admin':'badge-empleat'?>"><?=$rol_u?></span></td>
-        <td><strong><?=number_format((float)$ru['hores_totals'],2)?> h</strong></td>
-        <td><?=(int)$ru['total_registres']?></td><td><?=$dies?></td><td><?=number_format($mitjana,2)?> h</td></tr>
+        <td><strong><?= format_hores_rellotge((float)$ru['hores_totals']) ?></strong></td>
+        <td><?=(int)$ru['total_registres']?></td><td><?=$dies?></td><td><?= format_hores_rellotge($mitjana) ?></td></tr>
         <?php endforeach;?></tbody></table></div>
         <?php else: ?><p class="small">No hi ha dades.</p><?php endif; ?>
     </div>
@@ -282,7 +282,7 @@ $alertes = obtenir_alertes_incompliment($pdo);
             $est=(float)$rp['hores_estimades'];$real=(float)$rp['hores_realitzades'];$pct=$est>0?round(($real/$est)*100,1):0;
             $color=$pct>100?'#e74c3c':($pct>75?'#f39c12':'#27ae60');
         ?><tr><td><strong><?=htmlspecialchars($rp['nom'],ENT_QUOTES,'UTF-8')?></strong></td>
-        <td><?=number_format($est,2)?> h</td><td><?=number_format($real,2)?> h</td>
+        <td><?= format_hores_rellotge($est) ?></td><td><?= format_hores_rellotge($real) ?></td>
         <td><span style="color:<?=$color?>;font-weight:700;"><?=$pct?>%</span></td>
         <td><?=(int)$rp['usuaris_assignats']?></td><td><?=(int)$rp['dies_treballats']?></td></tr>
         <?php endforeach;?></tbody></table></div>
@@ -362,7 +362,7 @@ $alertes = obtenir_alertes_incompliment($pdo);
         <tbody><?php foreach($projectes as $p): ?>
         <tr><td><?=(int)$p['id']?></td><td><strong><?=htmlspecialchars($p['nom'],ENT_QUOTES,'UTF-8')?></strong></td>
         <td><?=htmlspecialchars($p['descripcio']??'—',ENT_QUOTES,'UTF-8')?></td>
-        <td><?=number_format((float)$p['hores_estimades'],2)?> h</td><td><?=date('d/m/Y',strtotime($p['creat_at']))?></td>
+        <td><?= format_hores_rellotge((float)$p['hores_estimades']) ?></td><td><?=date('d/m/Y',strtotime($p['creat_at']))?></td>
         <td>
             <a href="#editar_p_<?=$p['id']?>" class="btn btn-warning btn-sm">✏️</a>
             <form method="POST" action="?seccio=projectes" style="display:inline" onsubmit="return confirm('Eliminar projecte?')">
@@ -399,13 +399,13 @@ $alertes = obtenir_alertes_incompliment($pdo);
             $he=$inc['hora_entrada']??null;$hs=$inc['hora_sortida']??null;$h=$inc['hores_totals']??null;
             if(is_null($he))$motiu='❌ No ha fitxat entrada';
             elseif(is_null($h))$motiu='⏳ Sense sortida';
-            elseif((float)$h<8)$motiu='⚠️ Menys de 8h ('.number_format((float)$h,2).' h)';
+            elseif((float)$h<8)$motiu='⚠️ Menys de 8h ('.format_hores_rellotge((float)$h).')';
             else $motiu='';
         ?><tr><td><?=htmlspecialchars($inc['nom'].' '.$inc['cognom'],ENT_QUOTES,'UTF-8')?></td>
         <td><?=htmlspecialchars($inc['email'],ENT_QUOTES,'UTF-8')?></td>
         <td><?=$he?date('H:i:s',strtotime($he)):'—'?></td>
         <td><?=$hs?date('H:i:s',strtotime($hs)):'—'?></td>
-        <td><?=$h?number_format((float)$h,2).' h':'—'?></td>
+        <td><?=$h?format_hores_rellotge((float)$h):'—'?></td>
         <td><span class="badge" style="background:#fdecea;color:#c0392b;"><?=$motiu?></span></td></tr>
         <?php endforeach;?></tbody></table></div>
         <?php else: ?><p style="color:#27ae60;font-weight:700;">✅ Tots han fitxat correctament.</p><?php endif; ?>
